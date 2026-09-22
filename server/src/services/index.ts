@@ -37,7 +37,7 @@ import {
   type SaveNoteResult
 } from './notes.js';
 import { listPending, type PendingFilter } from './pending.js';
-import { searchNotes, type SearchFilter } from './search.js';
+import { countNotes, searchNotes, type SearchFilter, type SearchSort } from './search.js';
 import { listTags, renameTag } from './tags.js';
 
 /** Nota completa con todo lo que necesita get_note y la vista /nota/:id. */
@@ -68,6 +68,7 @@ export interface Services {
   renameTag(from: string, to: string): string;
 
   searchNotes(filter: SearchFilter): SearchHit[];
+  countNotes(filter: SearchFilter): number;
   getNote(idOrTitle: string): NoteDetail | null;
   requireNoteDetail(idOrTitle: string): NoteDetail;
   listRecentNotes(limit?: number): Note[];
@@ -113,6 +114,7 @@ export function createServices(db: Db, config: Config): Services {
     renameTag: (from, to) => renameTag(db, from, to),
 
     searchNotes: (filter) => searchNotes(db, filter),
+    countNotes: (filter) => countNotes(db, filter),
     getNote: (idOrTitle) => {
       const note = findNote(db, idOrTitle);
       return note ? detail(note) : null;
@@ -138,4 +140,4 @@ export function createServices(db: Db, config: Config): Services {
 }
 
 export { getNoteById, noteUrl };
-export type { ExportedNote, GraphOptions, LinkNotesResult, PendingFilter, SaveNoteResult, SearchFilter };
+export type { ExportedNote, GraphOptions, LinkNotesResult, PendingFilter, SaveNoteResult, SearchFilter, SearchSort };

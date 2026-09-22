@@ -6,13 +6,18 @@
   "description": "Base de conocimiento personal para conversaciones de Claude: servidor MCP + web local",
   "workspaces": [
     "shared",
-    "server"
+    "server",
+    "web"
   ],
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "build": "npm run build --workspace @bitacora/shared && npm run build --workspace @bitacora/server",
+    "build": "npm run build --workspace @bitacora/shared && npm run build --workspace @bitacora/server && npm run build --workspace @bitacora/web",
+    "start": "npm run start --workspace @bitacora/server",
+    "dev": "concurrently --names server,web --prefix-colors magenta,cyan \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "npm run dev --workspace @bitacora/server",
+    "dev:web": "npm run dev --workspace @bitacora/web",
     "migrate": "npm run migrate --workspace @bitacora/server",
     "seed": "npm run seed --workspace @bitacora/server",
     "export": "npm run export --workspace @bitacora/server",
@@ -21,11 +26,15 @@
     "inspector": "npx -y @modelcontextprotocol/inspector node server/dist/mcp/stdio.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --build --pretty"
+    "typecheck": "tsc --build --pretty && npm run typecheck --workspace @bitacora/web"
   },
   "devDependencies": {
+    "@types/archiver": "^8.0.0",
     "@types/better-sqlite3": "^9.6.0",
+    "@types/cookie-parser": "^1.4.10",
+    "@types/express": "^5.0.6",
     "@types/node": "^26.6.2",
+    "concurrently": "^10.0.5",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^5.0.1"

@@ -13,13 +13,13 @@ y forman un grafo.
 | Fase | Qué incluye | Estado |
 |---|---|---|
 | 1 | Esquema, migraciones, servicios, parsers, MCP por stdio con 12 tools, tests | **Lista** |
-| 2 | Interfaz web: listado, nota, pendientes, carpetas/tags, ajustes, grafo | Pendiente |
+| 2 | Interfaz web: listado, nota, pendientes, carpetas/tags, ajustes, grafo | **Lista** |
 | 3 | Streamable HTTP + OAuth 2.1 + Cloudflare Tunnel (conector en claude.ai) | Pendiente |
 | 4 | Importación del export de claude.ai | Pendiente |
 
 Hoy ya podés conectar Claude Desktop o Claude Code y guardar, buscar, leer, actualizar
-y enlazar notas. La interfaz web todavía no existe, así que la URL que devuelve
-`save_note` no abre nada hasta la fase 2.
+y enlazar notas, y abrir la web en `http://127.0.0.1:8787` para leerlas, editarlas y
+ver el grafo. El acceso desde claude.ai (web y celular) llega en la fase 3.
 
 ## Requisitos (Windows)
 
@@ -58,14 +58,74 @@ Copy-Item .env.example .env
 notepad .env
 ```
 
+## Levantar la web
+
+```powershell
+npm start
+```
+
+Abrí `http://127.0.0.1:8787`. La primera vez te va a pedir que definas la contraseña
+con la que vas a entrar; queda guardada hasheada en la base, y después la cambiás desde
+Ajustes. Si preferís dejarla escrita de entrada, poné `BITACORA_PASSWORD` en el `.env`
+antes del primer arranque.
+
+El servidor **escucha solo en `127.0.0.1`** y rechaza cualquier request cuyo header
+`Host` no sea el loopback, así que no queda expuesto en la red aunque tengas el firewall
+abierto. Todo lo que no sea el login exige sesión.
+
+### Qué tiene la web
+
+| Pantalla | Qué hace |
+|---|---|
+| `/` | Notas en tarjetas, buscador de texto completo, filtros por carpeta, tags y fechas, orden por fecha, título o relevancia |
+| `/nota/:id` | Markdown renderizado con `[[wikilinks]]` clickeables (los no resueltos en gris), frontmatter, backlinks, enlaces salientes, grafo local de 1 o 2 saltos, editor con vista previa y borrado con confirmación |
+| `/grafo` | Grafo global: física de fuerzas, zoom, arrastre, resaltado de vecinos al pasar el mouse, buscador que resalta, tags como nodos, enlaces sin resolver, aristas por tag compartido, filtros y sliders de repulsión, distancia y fuerza central |
+| `/pendientes` | Todos los pendientes, agrupables por responsable, nota o fecha; el checkbox reescribe la línea en la nota |
+| `/carpetas` y `/tags` | Renombrar, fusionar y borrar; renombrar una carpeta mueve sus notas y fusionar tags no duplica notas |
+| `/ajustes` | Exportar el vault como zip, bajar el backup de la base, cambiar contraseña, tema claro/oscuro y estado del vault |
+
+Tema oscuro por defecto, claro opcional desde la barra lateral o Ajustes.
+
+Los checkboxes son de verdad: tocar uno en la nota o en el tablero reescribe el
+`- [ ]` como `- [x]` **en el cuerpo de la nota**. No hay un estado paralelo que se
+pueda desincronizar.
+
+### Dejarlo corriendo al iniciar Windows
+
+La forma más simple, sin dependencias extra, es el Programador de tareas:
+
+1. Abrí **Programador de tareas** → *Crear tarea…* (no "tarea básica").
+2. **General**: nombre `Bitacora`, marcá *Ejecutar tanto si el usuario inició sesión
+   como si no* solo si querés que corra sin tu sesión; para uso personal alcanza con
+   *Ejecutar solo cuando el usuario haya iniciado sesión*.
+3. **Desencadenadores**: nuevo → *Al iniciar sesión*.
+4. **Acciones**: nuevo → *Iniciar un programa*.
+   - Programa: `C:\Program Files\nodejs\node.exe`
+   - Argumentos: `server\dist\index.js`
+   - Iniciar en: `C:\Users\<usuario>\bitacora`
+5. **Condiciones**: destildá *Iniciar la tarea solo si el equipo está conectado a la
+   corriente alterna*, si es una notebook.
+
+El "Iniciar en" es lo que más se olvida: sin eso el servidor no encuentra `data\`.
+
+Si preferís pm2:
+
+```powershell
+npm install -g pm2 pm2-windows-startup
+pm2-startup install
+pm2 start server\dist\index.js --name bitacora
+pm2 save
+```
+
 ## Probar que anda
 
 ```powershell
 npm test
 ```
 
-117 tests: parsers de wikilinks, secciones y pendientes, render de la plantilla,
-servicios y los tools MCP a través de un cliente real.
+143 tests: parsers de wikilinks, secciones y pendientes, render de la plantilla,
+servicios, hash de contraseña y freno de fuerza bruta, la API REST completa, y los
+tools MCP a través de un cliente MCP real.
 
 ### Con MCP Inspector
 
@@ -147,7 +207,9 @@ Después alcanza con decir *"guardá esto en Bitácora"*.
 
 | Comando | Qué hace |
 |---|---|
-| `npm run build` | Compila `shared` y `server` |
+| `npm start` | Levanta la web en `http://127.0.0.1:8787` |
+| `npm run dev` | Backend y frontend en modo desarrollo, con recarga |
+| `npm run build` | Compila `shared`, `server` y `web` |
 | `npm run migrate` | Aplica las migraciones pendientes |
 | `npm run seed` | Carga 14 notas de ejemplo enlazadas |
 | `npm run export` | Exporta el vault como `.md` a `data\exports\<fecha>` |
@@ -217,6 +279,9 @@ estado: archivado
 
 ## Backups
 
+Lo más cómodo es **Ajustes → Backup de la base**, que te baja el `.db` completo sin
+cerrar nada. Lo que sigue es lo mismo desde la terminal.
+
 Todo el estado vive en `data\bitacora.db`. La base está en modo WAL, así que hay dos
 archivos auxiliares (`-wal` y `-shm`) que también hay que copiar, o hacer un checkpoint
 primero.
@@ -237,6 +302,8 @@ node -e "const D=require('better-sqlite3');const db=new D('data/bitacora.db');co
 ```
 
 ## Exportar a Obsidian
+
+Desde **Ajustes → Exportar vault (.zip)**, o por terminal:
 
 ```powershell
 npm run export
@@ -261,8 +328,13 @@ bitacora/
 │  ├─ db/                 Apertura en WAL, migraciones versionadas
 │  ├─ services/           La única lógica de la app (la comparten MCP y la web)
 │  ├─ mcp/                Servidor MCP: tools, esquemas, entrypoint stdio
+│  ├─ http/               API REST, sesión y servido del frontend compilado
 │  ├─ seed.ts             14 notas de ejemplo
 │  └─ export-cli.ts       Exportación a .md
+├─ web/src/
+│  ├─ components/         Grafo (force-graph), markdown con wikilinks, layout
+│  ├─ pages/              Notas, nota, grafo, pendientes, carpetas, tags, ajustes
+│  └─ styles.css          Tema oscuro y claro en variables CSS
 ├─ skills/                Skill para Claude Code / Claude Desktop
 └─ data/                  Base SQLite, backups y exports (fuera de git)
 ```
@@ -292,13 +364,19 @@ Cosas que conviene saber si vas a tocar el código:
   escribir sobre la misma base al mismo tiempo.
 - El `score` de `search_notes` es relevancia **relativa** a esa búsqueda (100 = el mejor
   resultado). El bm25 crudo de SQLite son números del orden de 1e-6, inservibles sueltos.
+- **El grafo asigna colores por posición de la carpeta**, no por hash del nombre: un
+  hash hace que dos carpetas caigan en el mismo color y la leyenda deje de servir.
+- **Las etiquetas del grafo se dibujan a tamaño constante en pantalla** y se ocultan por
+  debajo de cierto zoom. Con pocas notas se ven siempre; con miles aparecen recién al
+  acercarte, que es lo que evita que se pisen.
+- **El encuadre automático espera a que la física se asiente** (`onEngineStop`), con un
+  respaldo por tiempo. Encuadrar antes deja nodos fuera de pantalla.
+- **La sesión web es una cookie httpOnly** contra una tabla `sessions`, así sobrevive a
+  reiniciar el servidor. La contraseña se guarda con scrypt y sal por contraseña, y
+  cambiarla corta todas las sesiones abiertas.
 
 ## Lo que viene
 
-- **Fase 2** — Web en `127.0.0.1`: listado con búsqueda y filtros, vista de nota con
-  backlinks y grafo local, tablero de pendientes, administración de carpetas y tags,
-  ajustes con export y backup, y el grafo global estilo Obsidian (force-graph sobre
-  canvas, con física, zoom, arrastre y resaltado de vecinos).
 - **Fase 3** — Streamable HTTP en `/mcp` con OAuth 2.1 (PKCE, registro dinámico de
   clientes, rotación de refresh tokens) y Cloudflare Tunnel, para usarlo como conector
   personalizado desde claude.ai en web y celular.

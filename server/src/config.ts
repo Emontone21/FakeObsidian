@@ -22,6 +22,8 @@ export interface Config {
   dbPath: string;
   /** Zona horaria con la que el servidor sella fecha y hora de las notas. */
   timeZone: string;
+  /** Puerto del servidor web. Siempre escucha en 127.0.0.1. */
+  port: number;
   /** Base para armar la URL de la nota en la web. */
   webBaseUrl: string;
   defaultFolders: string[];
@@ -44,6 +46,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ? path.resolve(process.cwd(), env.BITACORA_DATA_DIR)
     : path.join(REPO_ROOT, 'data');
 
+  const port = Number(env.BITACORA_PORT) || 8787;
+
   return {
     repoRoot: REPO_ROOT,
     dataDir,
@@ -51,7 +55,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       ? path.resolve(process.cwd(), env.BITACORA_DB_PATH)
       : path.join(dataDir, 'bitacora.db'),
     timeZone: env.BITACORA_TZ || 'America/Montevideo',
-    webBaseUrl: (env.BITACORA_WEB_URL || 'http://127.0.0.1:8787').replace(/\/+$/, ''),
+    port,
+    // Si no la fijan a mano, sigue al puerto: asi la URL que devuelve save_note abre.
+    webBaseUrl: (env.BITACORA_WEB_URL || `http://127.0.0.1:${port}`).replace(/\/+$/, ''),
     defaultFolders: DEFAULT_FOLDERS
   };
 }
