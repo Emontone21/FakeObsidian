@@ -1,5 +1,5 @@
 import { normalizeTag, normalizeTagList, type TagCount } from '@bitacora/shared';
-import type { Db } from '../db/index.js';
+import { writeTransaction, type Db } from '../db/index.js';
 import { BitacoraError } from './errors.js';
 
 export function listTags(db: Db, prefix?: string): TagCount[] {
@@ -50,7 +50,7 @@ export function renameTag(db: Db, from: string, to: string): string {
   if (!toName) throw new BitacoraError('INVALID_INPUT', 'El tag destino queda vacio al normalizarlo.');
   if (fromName === toName) return toName;
 
-  db.transaction(() => {
+  writeTransaction(db, () => {
     const source = db.prepare('SELECT id FROM tags WHERE name = ?').get(fromName) as { id: number } | undefined;
     if (!source) throw new BitacoraError('NOT_FOUND', `No existe el tag "${fromName}".`);
     const target = db.prepare('SELECT id FROM tags WHERE name = ?').get(toName) as { id: number } | undefined;
@@ -65,7 +65,7 @@ export function renameTag(db: Db, from: string, to: string): string {
        SELECT note_id, ?, position FROM note_tags WHERE tag_id = ?`
     ).run(target.id, source.id);
     db.prepare('DELETE FROM tags WHERE id = ?').run(source.id);
-  })();
+  });
 
   return toName;
 }

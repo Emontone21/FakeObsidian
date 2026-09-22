@@ -1,5 +1,5 @@
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
-import type { Db } from '../db/index.js';
+import { writeTransaction, type Db } from '../db/index.js';
 import { BitacoraError } from './errors.js';
 
 const PASSWORD_KEY = 'password_hash';
@@ -64,10 +64,10 @@ export function changePassword(db: Db, current: string, next: string): void {
   if (!checkPassword(db, current)) {
     throw new BitacoraError('INVALID_INPUT', 'La contrasena actual no es correcta.');
   }
-  db.transaction(() => {
+  writeTransaction(db, () => {
     setPassword(db, next);
     db.prepare('DELETE FROM sessions').run();
-  })();
+  });
 }
 
 export interface SessionInfo {

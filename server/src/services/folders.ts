@@ -1,5 +1,5 @@
 import type { FolderCount } from '@bitacora/shared';
-import type { Db } from '../db/index.js';
+import { writeTransaction, type Db } from '../db/index.js';
 import { BitacoraError, notFound } from './errors.js';
 
 export function listFolders(db: Db): FolderCount[] {
@@ -36,10 +36,10 @@ export function renameFolder(db: Db, from: string, to: string): void {
   if (from === clean) return;
   if (folderExists(db, clean)) {
     // Fusion: las notas se mudan y la carpeta vieja desaparece.
-    db.transaction(() => {
+    writeTransaction(db, () => {
       db.prepare('UPDATE notes SET folder = ? WHERE folder = ?').run(clean, from);
       db.prepare('DELETE FROM folders WHERE name = ?').run(from);
-    })();
+    });
     return;
   }
   // ON UPDATE CASCADE mueve las notas solo.
@@ -51,8 +51,8 @@ export function deleteFolder(db: Db, name: string, moveTo: string): void {
   if (!folderExists(db, name)) throw notFound(`No existe la carpeta "${name}".`);
   if (!folderExists(db, moveTo)) throw notFound(`No existe la carpeta destino "${moveTo}".`);
   if (name === moveTo) throw new BitacoraError('INVALID_INPUT', 'La carpeta destino debe ser distinta.');
-  db.transaction(() => {
+  writeTransaction(db, () => {
     db.prepare('UPDATE notes SET folder = ? WHERE folder = ?').run(moveTo, name);
     db.prepare('DELETE FROM folders WHERE name = ?').run(name);
-  })();
+  });
 }

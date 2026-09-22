@@ -29,7 +29,7 @@ import {
   type UpdateNoteInput
 } from '@bitacora/shared';
 import type { Config } from '../config.js';
-import type { Db } from '../db/index.js';
+import { writeTransaction, type Db } from '../db/index.js';
 import { BitacoraError, invalidInput, notFound } from './errors.js';
 import { newId } from './ids.js';
 import { ensureFolder } from './folders.js';
@@ -132,7 +132,7 @@ export function createNote(ctx: Ctx, input: SaveNoteInput): SaveNoteResult {
   const now = stamp(ctx);
   const source = input.source ?? 'claude';
 
-  return db.transaction((): SaveNoteResult => {
+  return writeTransaction(db, (): SaveNoteResult => {
     const folderCreated = ensureFolder(db, input.folder, now.iso);
     const { title, adjusted } = uniqueTitle(db, input.title);
     const key = titleKey(title);
@@ -173,7 +173,7 @@ export function createNote(ctx: Ctx, input: SaveNoteInput): SaveNoteResult {
       folderCreated,
       unresolvedLinks: unresolvedTargets(db, id)
     };
-  })();
+  });
 }
 
 /** Nombre real de la seccion de cierre de una nota: "Decisiones" o "Conclusiones". */
@@ -227,7 +227,7 @@ export function updateNote(ctx: Ctx, idOrTitle: string, input: UpdateNoteInput):
   const { db } = ctx;
   const now = stamp(ctx);
 
-  return db.transaction((): SaveNoteResult => {
+  return writeTransaction(db, (): SaveNoteResult => {
     const existing = requireNote(db, idOrTitle);
 
     if (input.bodyMarkdown !== undefined && SECTION_FIELDS.some((f) => input[f] !== undefined)) {
@@ -297,7 +297,7 @@ export function updateNote(ctx: Ctx, idOrTitle: string, input: UpdateNoteInput):
       folderCreated,
       unresolvedLinks: unresolvedTargets(db, existing.id)
     };
-  })();
+  });
 }
 
 /** Agrega markdown al final de una seccion existente. */
@@ -305,7 +305,7 @@ export function appendToNote(ctx: Ctx, idOrTitle: string, section: string, markd
   const { db } = ctx;
   const now = stamp(ctx);
 
-  return db.transaction((): Note => {
+  return writeTransaction(db, (): Note => {
     const note = requireNote(db, idOrTitle);
     const sections = listSectionNames(note.body);
     const match = sections.find((s) => titleKey(s) === titleKey(section));
@@ -320,7 +320,7 @@ export function appendToNote(ctx: Ctx, idOrTitle: string, section: string, markd
     db.prepare('UPDATE notes SET body = ?, updated_at = ? WHERE id = ?').run(body, now.iso, note.id);
     reindexNote(db, note.id, note.titleKey, body);
     return getNoteById(db, note.id)!;
-  })();
+  });
 }
 
 export interface LinkNotesResult {
@@ -335,7 +335,7 @@ export function linkNotes(ctx: Ctx, fromIdOrTitle: string, toIdOrTitle: string):
   const { db } = ctx;
   const now = stamp(ctx);
 
-  return db.transaction((): LinkNotesResult => {
+  return writeTransaction(db, (): LinkNotesResult => {
     const from = requireNote(db, fromIdOrTitle);
     const target = findNote(db, toIdOrTitle);
     const targetTitle = target?.title ?? toIdOrTitle.trim();
@@ -360,7 +360,7 @@ export function linkNotes(ctx: Ctx, fromIdOrTitle: string, toIdOrTitle: string):
       resolved: target !== null,
       alreadyLinked: false
     };
-  })();
+  });
 }
 
 export interface PendingToggleResult {
@@ -377,7 +377,7 @@ export function setPendingDone(ctx: Ctx, pendingId: string, done: boolean): Pend
   const { db } = ctx;
   const now = stamp(ctx);
 
-  return db.transaction((): PendingToggleResult => {
+  return writeTransaction(db, (): PendingToggleResult => {
     const item = getPending(db, pendingId);
     if (!item) throw notFound(`No existe el pendiente "${pendingId}".`);
     const note = getNoteById(db, item.noteId);
@@ -399,17 +399,17 @@ export function setPendingDone(ctx: Ctx, pendingId: string, done: boolean): Pend
 
     const refreshed = getPending(db, pendingId);
     return { pending: refreshed ?? { ...item, done }, note: getNoteById(db, note.id)!, changed: true };
-  })();
+  });
 }
 
 export function deleteNote(db: Db, idOrTitle: string): Note {
-  return db.transaction((): Note => {
+  return writeTransaction(db, (): Note => {
     const note = requireNote(db, idOrTitle);
     // Los backlinks no se borran: quedan como enlaces no resueltos (ON DELETE SET NULL).
     db.prepare('DELETE FROM notes WHERE id = ?').run(note.id);
     pruneOrphanTags(db);
     return note;
-  })();
+  });
 }
 
 export function listRecentNotes(db: Db, limit = 10): Note[] {

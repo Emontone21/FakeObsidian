@@ -21,6 +21,23 @@ export function openDatabase(dbPath: string): Db {
   return db;
 }
 
+/**
+ * Transaccion de escritura: BEGIN IMMEDIATE, no el BEGIN deferred por defecto.
+ *
+ * Una transaccion deferred toma el lock de lectura primero y recien despues
+ * intenta subir a escritura. Si en ese momento otra conexion esta escribiendo,
+ * SQLite devuelve SQLITE_BUSY al instante y NO respeta busy_timeout, porque
+ * reintentar un upgrade puede terminar en deadlock. Con IMMEDIATE el lock de
+ * escritura se pide de entrada, asi que busy_timeout sí aplica y la segunda
+ * escritura espera su turno en vez de fallar.
+ *
+ * Importa de verdad: el proceso MCP por stdio y el servidor web escriben la
+ * misma base al mismo tiempo.
+ */
+export function writeTransaction<T>(db: Db, run: () => T): T {
+  return db.transaction(run).immediate();
+}
+
 export interface Migration {
   version: number;
   name: string;
@@ -60,7 +77,7 @@ export function migrate(db: Db, dir: string = MIGRATIONS_DIR): number[] {
   const done: number[] = [];
 
   for (const migration of pending) {
-    const apply = db.transaction(() => {
+    const apply = () => writeTransaction(db, () => {
       db.exec(migration.sql);
       db.prepare('INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)').run(
         migration.version,
@@ -86,9 +103,9 @@ export function ensureDefaultFolders(db: Db, folders: readonly string[], now: st
   const insert = db.prepare(
     'INSERT INTO folders (name, position, created_at) VALUES (?, ?, ?) ON CONFLICT (name) DO NOTHING'
   );
-  db.transaction(() => {
+  writeTransaction(db, () => {
     folders.forEach((name, index) => insert.run(name, index, now));
-  })();
+  });
 }
 
 export interface InitResult {

@@ -423,8 +423,15 @@ Cosas que conviene saber si vas a tocar el código:
 - **Los parsers ignoran los bloques de código**: un `## algo` o un `[[algo]]` dentro de
   un bloque ``` no cuenta como encabezado ni como enlace.
 - **FTS5 con `remove_diacritics 2`**: "desviacion" encuentra "desviación".
-- **WAL activo**, porque el proceso MCP por stdio y el servidor web de la fase 2 van a
-  escribir sobre la misma base al mismo tiempo.
+- **WAL activo**, porque el proceso MCP por stdio y el servidor web escriben sobre la
+  misma base al mismo tiempo.
+- **Las transacciones de escritura son `BEGIN IMMEDIATE`**, no el `BEGIN` deferred que
+  usa better-sqlite3 por defecto. Una transacción deferred toma el lock de lectura y
+  recién después intenta subir a escritura; si en ese momento el otro proceso está
+  escribiendo, SQLite devuelve `database is locked` **al instante y sin respetar
+  `busy_timeout`**, porque reintentar un upgrade puede terminar en deadlock. Con
+  `IMMEDIATE` el lock se pide de entrada y la segunda escritura espera su turno. Es el
+  escenario de todos los días: Claude Desktop guardando una nota con la web abierta.
 - El `score` de `search_notes` es relevancia **relativa** a esa búsqueda (100 = el mejor
   resultado). El bm25 crudo de SQLite son números del orden de 1e-6, inservibles sueltos.
 - **El grafo asigna colores por posición de la carpeta**, no por hash del nombre: un
