@@ -1,0 +1,33 @@
+{
+  "name": "bitacora",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Base de conocimiento personal para conversaciones de Claude: servidor MCP + web local",
+  "workspaces": [
+    "shared",
+    "server"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "npm run build --workspace @bitacora/shared && npm run build --workspace @bitacora/server",
+    "migrate": "npm run migrate --workspace @bitacora/server",
+    "seed": "npm run seed --workspace @bitacora/server",
+    "export": "npm run export --workspace @bitacora/server",
+    "mcp:stdio": "node server/dist/mcp/stdio.js",
+    "mcp:stdio:dev": "tsx server/src/mcp/stdio.ts",
+    "inspector": "npx -y @modelcontextprotocol/inspector node server/dist/mcp/stdio.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --build --pretty"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^26.6.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1"
+  }
+}

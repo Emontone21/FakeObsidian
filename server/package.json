@@ -1,0 +1,19 @@
+{
+  "name": "@bitacora/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc --build && node scripts/copy-assets.mjs",
+    "migrate": "node dist/db/cli-migrate.js",
+    "seed": "node dist/seed.js",
+    "export": "node dist/export-cli.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "better-sqlite3": "^13.0.3",
+    "ulid": "^3.0.2",
+    "zod": "^4.6.5"
+  }
+}
