@@ -204,11 +204,22 @@ export function ImportPage() {
             )}
           </div>
 
-          {status.data?.resumidor.habilitado ? (
+          <p style={{ color: 'var(--text-muted)' }}>
+            Las notas quedaron con la transcripción cruda y el tag <code>sin-resumir</code>. Para que tengan
+            contexto, decisiones, pendientes y referencias, <strong>pedíselo a Claude Desktop</strong>: ya está
+            conectado por MCP y puede leerlas y completarlas él mismo, sin costo aparte de tu suscripción.
+          </p>
+          <div className="frontmatter" style={{ fontFamily: 'var(--font)', marginBottom: 14 }}>
+            Abrí Claude Desktop y usá el prompt <strong>resumir-importadas</strong> del conector Bitácora, o
+            escribile directamente: <em>«resumí las notas sin resumir de Bitácora, de a 5»</em>.
+          </div>
+
+          {status.data?.resumidor.habilitado && (
             <>
-              <p style={{ color: 'var(--text-muted)' }}>
-                Las notas quedaron con la transcripción cruda y el tag <code>sin-resumir</code>. Podés generarles
-                la plantilla estructurada (contexto, decisiones, pendientes, referencias) con Claude.
+              <p className="hint">
+                También hay <code>ANTHROPIC_API_KEY</code> configurada, así que el servidor puede resumirlas solo.
+                Sirve para tandas grandes; para pocas notas conviene Claude Desktop, que te deja revisar sobre la
+                marcha.
               </p>
               {summary ? (
                 <div className="banner info">
@@ -220,16 +231,11 @@ export function ImportPage() {
                   )}
                 </div>
               ) : (
-                <button className="btn primary" onClick={() => void summarizeAll()}>
-                  Generar resumen de las {result.imported.length} notas
+                <button className="btn" onClick={() => void summarizeAll()}>
+                  Resumir las {result.imported.length} con la API
                 </button>
               )}
             </>
-          ) : (
-            <p className="hint">
-              {status.data?.resumidor.estado} Podés resumirlas después agregando la clave al <code>.env</code>, o
-              abrir cada nota y escribir el resumen a mano.
-            </p>
           )}
 
           <div style={{ marginTop: 16 }}>

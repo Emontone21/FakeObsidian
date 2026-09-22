@@ -181,9 +181,12 @@ Tres cosas que importan:
    variables de tu terminal. Alternativamente, dejalas en el `.env` del repo, que el
    servidor lee solo.
 
-Reiniciá Claude Desktop. Bitácora aparece en el menú de herramientas, y el prompt
-**"guardar-conversacion"** queda disponible en el menú de prompts del conector: con eso
-solo ya podés archivar un chat sin instalar nada más.
+Reiniciá Claude Desktop. Bitácora aparece en el menú de herramientas, y el conector
+publica dos prompts que ya sirven sin instalar nada más:
+
+- **`guardar-conversacion`** — archiva el chat actual como nota estructurada.
+- **`resumir-importadas`** — completa las notas que quedaron sin resumir después de
+  importar el export de claude.ai.
 
 ## Conectar a Claude Code
 
@@ -228,20 +231,37 @@ acepta la lista suelta o envuelta en un objeto, `chat_messages` o `messages`, `s
 `role`, texto plano o bloques de contenido, y fechas ISO o epoch. Lo que no entiende lo
 saltea y te lo informa, en vez de fallar entero.
 
-### Generar el resumen con Claude (opcional)
+### Resumirlas: se lo pedís a Claude Desktop
 
-Las notas importadas traen la transcripción cruda, no la plantilla. Si ponés
-`ANTHROPIC_API_KEY` en el `.env`, aparece un botón **Generar resumen** —en la pantalla de
-importación para hacerlo en lote, y en cada nota para hacerlo de a una— que produce
-contexto, decisiones, pendientes y referencias desde la transcripción, sugiere carpeta y
-tags, pasa la nota a `archivado` y le saca el tag `sin-resumir`. La transcripción queda
-intacta.
+Las notas importadas traen la transcripción cruda, no la plantilla. Para completarlas
+**no hace falta ninguna clave de API ni pagar nada aparte**: Claude Desktop ya está
+conectado por MCP y tiene los tools para hacerlo él mismo.
+
+Abrí Claude Desktop y usá el prompt **`resumir-importadas`** del conector Bitácora, o
+escribile directamente:
+
+> resumí las notas sin resumir de Bitácora, de a 5
+
+Claude busca las que tienen el tag `sin-resumir`, lee la transcripción de cada una y las
+completa con `update_note`: contexto, decisiones, pendientes y referencias, más carpeta y
+tags, pasándolas a `archivado` y sacándoles el tag. La transcripción queda intacta.
+
+La ventaja de hacerlo así, además del costo, es que lo ves pasar y podés corregirlo sobre
+la marcha: «esa iba en Regulatorios», «ese pendiente no se acordó».
+
+<details>
+<summary>Alternativa para tandas grandes sin supervisión</summary>
+
+Si tenés una `ANTHROPIC_API_KEY` y querés resumir cientos de notas de un saque, ponela en
+el `.env` y aparece un botón **Resumir con la API** en la pantalla de importación y en
+cada nota. El servidor llama a la API por su cuenta con el mismo criterio.
 
 Tiene tres frenos puestos a propósito: no mueve la nota a una carpeta que no exista, no
 guarda fechas que no parseen, y si la llamada falla la nota queda como estaba.
 
-Sin la clave, la importación funciona igual: las notas quedan con el tag `sin-resumir` y
-las resumís a mano cuando quieras.
+Para uso normal no hace falta: conviene Claude Desktop.
+
+</details>
 
 ## Comandos
 
@@ -314,6 +334,8 @@ estado: archivado
 | `complete_pending` | Marca hecho y reescribe la línea en la nota |
 | `get_graph_neighborhood` | Nodos y aristas alrededor de una nota |
 | `list_recent_notes` | Últimas notas modificadas |
+
+Más dos prompts: `guardar-conversacion` y `resumir-importadas`.
 
 **Borrar notas no se expone por MCP**: eso queda para la interfaz web, con confirmación.
 

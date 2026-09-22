@@ -31,7 +31,7 @@ export const contentShape = {
   tags: z
     .array(z.string())
     .describe(
-      'Tags tematicos. El servidor los normaliza (minusculas, sin acentos, con guiones) y agrega "claude" al principio. Llama antes a list_tags para reusar los que ya existen.'
+      'Tags tematicos. El servidor los normaliza (minusculas, sin acentos, con guiones). Al crear una nota agrega "claude" al principio; al actualizarla, la lista que mandes reemplaza a la anterior tal cual. Llama antes a list_tags para reusar los que ya existen.'
     ),
   summary: z
     .string()

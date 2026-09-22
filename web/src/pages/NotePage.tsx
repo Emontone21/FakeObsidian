@@ -214,11 +214,11 @@ function ExistingNote({ id }: { id: string }) {
     >
       {notice && <div className={notice.kind === 'ok' ? 'banner ok' : 'banner error'}>{notice.text}</div>}
 
-      {sinResumir && !status.data?.resumidor.habilitado && (
+      {sinResumir && (
         <div className="banner info">
-          Esta nota se importó sin resumir. Para generarle la plantilla estructurada con Claude, agregá{' '}
-          <code>ANTHROPIC_API_KEY</code> al <code>.env</code> y reiniciá el servidor. También podés escribirla a mano
-          desde «Editar».
+          Esta nota se importó sin resumir. Pedíle a <strong>Claude Desktop</strong> que la complete: ya está
+          conectado por MCP y puede leer la transcripción y llenar contexto, decisiones y pendientes. Alcanza con
+          «resumí la nota «{note.title}» de Bitácora». También podés escribirla a mano desde «Editar».
         </div>
       )}
 

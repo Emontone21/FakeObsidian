@@ -1,6 +1,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { parseClaudeExport } from '@bitacora/shared';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createTestApp, type TestApp } from '../testing.js';
 import { createMcpServer } from './server.js';
@@ -97,7 +98,7 @@ describe('superficie del servidor MCP', () => {
 
   it('publica el prompt guardar-conversacion con las instrucciones de archivado', async () => {
     const { prompts } = await client.listPrompts();
-    expect(prompts.map((p) => p.name)).toEqual(['guardar-conversacion']);
+    expect(prompts.map((p) => p.name).sort()).toEqual(['guardar-conversacion', 'resumir-importadas']);
 
     const prompt = await client.getPrompt({ name: 'guardar-conversacion', arguments: {} });
     const text = prompt.messages.map((m) => (m.content.type === 'text' ? m.content.text : '')).join('\n');
@@ -106,6 +107,99 @@ describe('superficie del servidor MCP', () => {
     expect(text).toMatch(/save_note/);
     expect(text).toMatch(/Nunca inventes normas/);
     expect(text).toMatch(/Anonimiza datos personales/);
+  });
+});
+
+describe('resumir sin API key, desde el propio cliente MCP', () => {
+  /** Lo que haria Claude Desktop al recibir el prompt: buscar, leer y actualizar. */
+  async function importarUna() {
+    const parsed = parseClaudeExport([
+      {
+        uuid: 'conv-x',
+        name: 'charla suelta',
+        created_at: '2026-03-04T13:15:00Z',
+        chat_messages: [
+          { sender: 'human', text: 'El HPLC dio un OOS en el lote AMX-2401.' },
+          { sender: 'assistant', text: 'Conviene revisar la calibración antes de re-analizar.' }
+        ]
+      }
+    ]);
+    return app.services.importConversations(parsed).imported[0]!.id;
+  }
+
+  it('el prompt explica el flujo completo y aclara que no hace falta clave', async () => {
+    const prompt = await client.getPrompt({ name: 'resumir-importadas', arguments: {} });
+    const text = prompt.messages.map((m) => (m.content.type === 'text' ? m.content.text : '')).join('\n');
+
+    expect(text).toMatch(/search_notes/);
+    expect(text).toMatch(/get_note/);
+    expect(text).toMatch(/update_note/);
+    expect(text).toMatch(/sin-resumir/);
+    expect(text).toMatch(/NO toques notas_adicionales/);
+    expect(text).toMatch(/Nunca inventes normas/i);
+
+    const description = (await client.listPrompts()).prompts.find((p) => p.name === 'resumir-importadas');
+    expect(description?.description).toMatch(/No necesita ninguna clave de API/);
+  });
+
+  it('search_notes encuentra las que faltan resumir', async () => {
+    const id = await importarUna();
+    const { resultados } = await call<{ resultados: { id: string; tags: string[] }[] }>('search_notes', {
+      tags: ['sin-resumir']
+    });
+
+    expect(resultados.map((r) => r.id)).toEqual([id]);
+    expect(resultados[0]!.tags).toEqual(['import', 'sin-resumir']);
+  });
+
+  it('get_note trae la transcripcion para poder leerla', async () => {
+    const id = await importarUna();
+    const note = await call<{ markdown: string }>('get_note', { id });
+
+    expect(note.markdown).toContain('El HPLC dio un OOS en el lote AMX-2401.');
+    expect(note.markdown).toContain('Transcripcion completa');
+  });
+
+  it('update_note completa la plantilla, saca el tag y archiva, sin tocar la transcripcion', async () => {
+    const id = await importarUna();
+
+    await call('update_note', {
+      id,
+      title: 'OOS de valoración por calibración de HPLC',
+      folder: 'Calidad',
+      tags: ['import', 'calidad', 'oos'],
+      summary: 'Investigación de un OOS atribuido a la calibración del cromatógrafo.',
+      contexto: 'El lote AMX-2401 dio fuera de especificación en valoración.',
+      decisiones: ['Revisar la calibración antes de re-analizar.'],
+      pendientes: [{ accion: 'Verificar la calibración', responsable: 'Metrología', fecha: '30/05/2026' }],
+      referencias: [],
+      status: 'archivado'
+    });
+
+    const note = await call<{ title: string; tags: string[]; status: string; markdown: string }>('get_note', { id });
+
+    expect(note.title).toBe('OOS de valoración por calibración de HPLC');
+    expect(note.tags).toEqual(['import', 'calidad', 'oos']);
+    expect(note.status).toBe('archivado');
+    expect(note.markdown).toContain('## Contexto\n\nEl lote AMX-2401 dio fuera de especificación');
+    // La transcripcion sigue entera.
+    expect(note.markdown).toContain('Transcripcion completa');
+    expect(note.markdown).toContain('El HPLC dio un OOS en el lote AMX-2401.');
+
+    // Y ya no aparece entre las que faltan resumir.
+    const pendientes = await call<{ resultados: unknown[] }>('search_notes', { tags: ['sin-resumir'] });
+    expect(pendientes.resultados).toHaveLength(0);
+  });
+
+  it('el pendiente que saco del resumen queda indexado', async () => {
+    const id = await importarUna();
+    await call('update_note', {
+      id,
+      pendientes: [{ accion: 'Verificar la calibración', responsable: 'Metrología', fecha: '30/05/2026' }]
+    });
+
+    const { pendientes } = await call<{ pendientes: { accion: string; fecha: string }[] }>('list_pending', {});
+    expect(pendientes[0]).toMatchObject({ accion: 'Verificar la calibración', fecha: '2026-05-30' });
   });
 });
 

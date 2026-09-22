@@ -159,6 +159,36 @@ Para conectar dos notas ya guardadas sin reescribir nada:
 link_notes(from_id, to_title="Título de la otra nota")
 ```
 
+## Resumir notas importadas
+
+Las notas que vienen del export de claude.ai quedan con la transcripción cruda, el tag
+`sin-resumir` y `estado: sin resumir`. **Completarlas es trabajo tuyo, no del servidor:**
+no hace falta ninguna clave de API, alcanza con los tools del conector.
+
+El conector trae el prompt `resumir-importadas` con el procedimiento completo. Si el
+usuario te lo pide en sus palabras («resumí las importadas», «completá las notas sin
+resumir»), hacé lo mismo:
+
+```
+search_notes(tags=["sin-resumir"], limit=5)   # cuáles faltan
+list_folders() ; list_tags()                  # una sola vez
+get_note(id)                                  # la transcripción está en "Notas adicionales"
+update_note(id, {title?, folder, tags, summary, contexto, decisiones,
+                 pendientes, referencias, tipo_seccion?, status: "archivado"})
+```
+
+Tres cosas que importan:
+
+- **No toques `notas_adicionales`.** Ahí vive la transcripción y tiene que quedar intacta:
+  es el respaldo de lo que realmente se dijo.
+- **En `tags`, conservá `import` y no incluyas `sin-resumir`.** La lista que mandás
+  reemplaza a la anterior, así que omitirlo es lo que lo saca.
+- **Andá de a pocas** (5 por defecto) y contale al usuario cuántas resumiste y cuántas
+  quedan. Resumir 200 de una es una sesión eterna y él no puede revisar nada.
+
+El título importado suele ser malo (genérico, o derivado del primer mensaje). Si es así,
+mejoralo; si ya es descriptivo, no lo toques.
+
 ## Pendientes
 
 ```
@@ -196,3 +226,4 @@ de código. No los resumas.
 - Anonimizá datos personales identificables.
 - Pasale siempre la URL al usuario.
 - Las notas se borran solo desde la web, nunca por MCP.
+- Las notas importadas las resumís vos con `get_note` + `update_note`, sin clave de API.

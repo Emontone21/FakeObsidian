@@ -127,11 +127,16 @@ export function SettingsPage({ onLoggedOut }: { onLoggedOut: () => void }) {
       </div>
 
       <div className="panel">
-        <h2>Resumen automático</h2>
-        <p style={{ color: 'var(--text-muted)', marginTop: 0 }}>{status.data?.resumidor.estado ?? 'Cargando…'}</p>
+        <h2>Resumir notas importadas</h2>
+        <p style={{ color: 'var(--text-muted)', marginTop: 0 }}>
+          El camino normal es pedírselo a <strong>Claude Desktop</strong>, que ya está conectado por MCP: usá el
+          prompt <code>resumir-importadas</code> del conector Bitácora. No hace falta ninguna clave y no cuesta nada
+          aparte de tu suscripción.
+        </p>
         <p className="hint">
-          Con <code>ANTHROPIC_API_KEY</code> en el <code>.env</code>, las notas importadas muestran un botón para
-          generar la plantilla estructurada con Claude a partir de la transcripción.
+          Opcional, para tandas grandes sin supervisión: con <code>ANTHROPIC_API_KEY</code> en el <code>.env</code>,
+          el servidor las resume solo desde la pantalla de importación. Estado actual:{' '}
+          {status.data?.resumidor.estado ?? 'cargando…'}
         </p>
       </div>
 

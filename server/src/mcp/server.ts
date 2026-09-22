@@ -467,5 +467,51 @@ Cuando termines, decime en que carpeta quedo, con que tags, y pasame la URL que 
     })
   );
 
+  server.registerPrompt(
+    'resumir-importadas',
+    {
+      title: 'Resumir las notas importadas de claude.ai',
+      description:
+        'Toma las notas que quedaron con el tag "sin-resumir" despues de importar el export de claude.ai y les arma la plantilla estructurada leyendo su transcripcion. No necesita ninguna clave de API: el trabajo lo haces vos con los tools del conector.',
+      argsSchema: {
+        cantidad: z
+          .string()
+          .optional()
+          .describe('Cuantas notas resumir en esta pasada. Por defecto 5, para no hacer una sesion eterna.')
+      }
+    },
+    ({ cantidad }) => ({
+      messages: [
+        {
+          role: 'user' as const,
+          content: {
+            type: 'text' as const,
+            text: `Resumi las notas de Bitacora que todavia estan sin resumir.
+
+1. Corre search_notes con tags ["sin-resumir"] y limit ${cantidad || '5'} para ver cuales faltan. Si no vuelve ninguna, decime que no quedan y termina.
+2. Una sola vez, corre list_folders y list_tags para tener a mano la taxonomia que ya existe.
+3. Para cada nota, en orden:
+   a. get_note con su id. La transcripcion completa esta en la seccion "Notas adicionales".
+   b. Lee la transcripcion y arma el resumen.
+   c. update_note con estos campos:
+      - title: si el titulo actual es malo (generico, cortado, derivado del primer mensaje), ponele uno descriptivo de 4 a 10 palabras. Si ya es bueno, no lo toques.
+      - folder: la carpeta existente que mejor encaje. Si ninguna encaja de verdad, dejala donde esta.
+      - tags: los tematicos que correspondan. Conserva "import" y NO incluyas "sin-resumir": la lista que mandes reemplaza a la anterior.
+      - summary: una o dos oraciones.
+      - contexto: 2 a 5 oraciones entendibles sin haber visto la conversacion.
+      - decisiones: una por elemento. Si hubo analisis pero ninguna decision cerrada, manda tipo_seccion "conclusiones".
+      - pendientes: solo lo que se acordo de verdad, con responsable y fecha en DD/MM/AAAA.
+      - referencias: SOLO lo citado explicitamente. Si no se cito nada concreto, manda la lista vacia.
+      - status: "archivado".
+   d. NO toques notas_adicionales: ahi vive la transcripcion y tiene que quedar intacta.
+4. Cuando termines, decime cuantas resumiste y cuantas quedan sin resumir.
+
+Reglas: espanol neutro sin voseo, nunca inventes normas ni numeros de SOP, y anonimiza datos personales identificables avisandome que lo hiciste.`
+          }
+        }
+      ]
+    })
+  );
+
   return server;
 }
