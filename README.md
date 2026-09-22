@@ -37,7 +37,39 @@ guardar notas desde el celular, se hace en su momento sin tocar nada de lo que y
 
 ## Instalación
 
-Abrí PowerShell y corré, uno por uno:
+### Rápida: un solo comando
+
+El repo trae `instalar.ps1`, que hace todo: instala dependencias, compila, prepara
+la base, registra el conector en Claude Desktop y en Claude Code, e instala la skill.
+
+```powershell
+cd C:\Users\<usuario>\bitacora
+.\instalar.ps1
+```
+
+Es idempotente: podés correrlo las veces que quieras. No pisa tu base de datos ni tu
+contraseña, y antes de tocar `claude_desktop_config.json` deja una copia con fecha al
+lado (respetando los conectores que ya tuvieras).
+
+Opciones útiles:
+
+| Opción | Para qué |
+|---|---|
+| `-ZonaHoraria America/Buenos_Aires` | Cambiar la zona horaria (por defecto Montevideo) |
+| `-Puerto 9000` | Usar otro puerto para la web |
+| `-ConDatosDeEjemplo` | Cargar las 14 notas de ejemplo para ver el grafo con contenido |
+| `-SaltearBuild` | Solo reconectar, sin recompilar |
+| `-SaltearClaudeDesktop` / `-SaltearClaudeCode` / `-SaltearSkill` | Saltear ese paso |
+
+Si Windows bloquea el script por la política de ejecución:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\instalar.ps1
+```
+
+### Manual, paso a paso
+
+Si preferís ver qué hace cada cosa, abrí PowerShell y corré, uno por uno:
 
 ```powershell
 cd C:\Users\<usuario>
