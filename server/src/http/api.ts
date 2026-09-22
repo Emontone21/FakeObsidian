@@ -2,7 +2,7 @@ import { ZipArchive } from 'archiver';
 import { randomBytes } from 'node:crypto';
 import { rm } from 'node:fs/promises';
 import path from 'node:path';
-import { Router, type Request, type Response } from 'express';
+import express, { Router, type Request, type Response } from 'express';
 import type { App } from '../bootstrap.js';
 import {
   changePassword,
@@ -15,7 +15,9 @@ import {
   setPassword
 } from '../services/auth.js';
 import { BitacoraError } from '../services/errors.js';
+import { readConversationsJson } from '../services/archive.js';
 import type { SearchSort } from '../services/index.js';
+import { parseClaudeExportText } from '@bitacora/shared';
 
 export const SESSION_COOKIE = 'bitacora_session';
 
@@ -262,6 +264,51 @@ export function createApiRouter(app: App): Router {
     handle(res, () => services.getNeighborhood(req.params.id, num(req.query.depth) ?? 1, graphOptions(req)))
   );
 
+  // --- Importacion ----------------------------------------------------------
+
+  // El export de claude.ai puede pesar bastante, asi que entra como binario crudo.
+  const uploadBody = express.raw({ type: '*/*', limit: '256mb' });
+
+  router.post('/import', uploadBody, (req, res) => {
+    void (async () => {
+      try {
+        const body = req.body as Buffer | undefined;
+        if (!body || body.length === 0) {
+          res.status(400).json({ error: 'No llego ningun archivo.' });
+          return;
+        }
+        const { text, source } = await readConversationsJson(new Uint8Array(body));
+        const parsed = parseClaudeExportText(text);
+        const report = services.importConversations(parsed, {
+          folder: str(req.query.folder) ?? undefined,
+          dryRun: bool(req.query.dry_run)
+        });
+        res.json({ ...report, archivo: source, dryRun: bool(req.query.dry_run) });
+      } catch (error) {
+        if (error instanceof BitacoraError) {
+          res.status(STATUS_BY_CODE[error.code] ?? 400).json({ error: error.message, code: error.code });
+          return;
+        }
+        res.status(400).json({ error: (error as Error).message });
+      }
+    })();
+  });
+
+  router.post('/notes/:id/summarize', (req, res) => {
+    void (async () => {
+      try {
+        res.json(await services.summarizeNote(req.params.id));
+      } catch (error) {
+        if (error instanceof BitacoraError) {
+          res.status(STATUS_BY_CODE[error.code] ?? 400).json({ error: error.message, code: error.code });
+          return;
+        }
+        console.error('[api] fallo el resumen:', (error as Error).message);
+        res.status(502).json({ error: `No se pudo generar el resumen: ${(error as Error).message}` });
+      }
+    })();
+  });
+
   // --- Ajustes --------------------------------------------------------------
 
   router.get('/status', (_req, res) =>
@@ -279,7 +326,13 @@ export function createApiRouter(app: App): Router {
         enlacesSinResolver: count('SELECT count(*) AS c FROM links WHERE to_note_id IS NULL'),
         pendientesAbiertos: count('SELECT count(*) AS c FROM pending_items WHERE done = 0'),
         // El conector remoto llega en la fase 3.
-        conectorRemoto: { habilitado: false, estado: 'No configurado (fase 3)' }
+        conectorRemoto: { habilitado: false, estado: 'No configurado (fase 3)' },
+        resumidor: {
+          habilitado: services.summarizerEnabled(),
+          estado: services.summarizerEnabled()
+            ? 'Listo: hay ANTHROPIC_API_KEY configurada.'
+            : 'Sin ANTHROPIC_API_KEY: las notas importadas quedan con el tag sin-resumir.'
+        }
       };
     })
   );

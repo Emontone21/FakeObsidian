@@ -130,9 +130,12 @@ function ExistingNote({ id }: { id: string }) {
     () => buildFolderColors((folders.data?.carpetas ?? []).map((f) => f.name)),
     [folders.data]
   );
+  const status = useAsync(() => api.status(), []);
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [depth, setDepth] = useState(1);
+  const [summarizing, setSummarizing] = useState(false);
+  const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
 
   const local = useAsync(
     () => (detail.data ? api.localGraph(detail.data.note.id, depth, { include_phantoms: true }) : Promise.resolve(null)),
@@ -156,6 +159,7 @@ function ExistingNote({ id }: { id: string }) {
   }
 
   const { note, outlinks, backlinks, pending } = detail.data;
+  const sinResumir = note.tags.includes('sin-resumir');
 
   async function toggleTask(index: number, done: boolean) {
     const item = pending[index];
@@ -169,11 +173,36 @@ function ExistingNote({ id }: { id: string }) {
     navigate('/');
   }
 
+  async function summarize() {
+    setSummarizing(true);
+    setNotice(null);
+    try {
+      const result = await api.summarizeNote(note.id);
+      setNotice({
+        kind: 'ok',
+        text:
+          result.avisos.length > 0
+            ? `Resumen generado. ${result.avisos.join(' ')}`
+            : 'Resumen generado: la nota ya tiene contexto, decisiones y pendientes.'
+      });
+      detail.reload();
+    } catch (cause) {
+      setNotice({ kind: 'error', text: cause instanceof Error ? cause.message : 'No se pudo generar el resumen.' });
+    } finally {
+      setSummarizing(false);
+    }
+  }
+
   return (
     <Page
       title={note.title}
       actions={
         <>
+          {sinResumir && status.data?.resumidor.habilitado && (
+            <button className="btn primary" disabled={summarizing} onClick={() => void summarize()}>
+              {summarizing ? 'Resumiendo…' : 'Generar resumen'}
+            </button>
+          )}
           <button className="btn" onClick={() => setEditing((v) => !v)}>
             {editing ? 'Ver' : 'Editar'}
           </button>
@@ -183,6 +212,16 @@ function ExistingNote({ id }: { id: string }) {
         </>
       }
     >
+      {notice && <div className={notice.kind === 'ok' ? 'banner ok' : 'banner error'}>{notice.text}</div>}
+
+      {sinResumir && !status.data?.resumidor.habilitado && (
+        <div className="banner info">
+          Esta nota se importó sin resumir. Para generarle la plantilla estructurada con Claude, agregá{' '}
+          <code>ANTHROPIC_API_KEY</code> al <code>.env</code> y reiniciá el servidor. También podés escribirla a mano
+          desde «Editar».
+        </div>
+      )}
+
       {editing ? (
         <NoteEditor
           detail={detail.data}

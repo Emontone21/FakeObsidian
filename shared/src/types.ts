@@ -87,6 +87,10 @@ export interface SaveNoteInput {
   sourceConversationId?: string | null;
   source?: NoteSource;
   status?: string;
+  /** YYYY-MM-DD. Por defecto la fecha de hoy en la zona configurada. */
+  date?: string;
+  /** HH:MM. Por defecto la hora actual en la zona configurada. */
+  time?: string;
 }
 
 export interface UpdateNoteInput {

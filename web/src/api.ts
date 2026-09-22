@@ -38,6 +38,22 @@ export interface Status {
   enlacesSinResolver: number;
   pendientesAbiertos: number;
   conectorRemoto: { habilitado: boolean; estado: string };
+  resumidor: { habilitado: boolean; estado: string };
+}
+
+export interface ImportReport {
+  total: number;
+  imported: { id: string; title: string; conversationId: string | null }[];
+  skipped: { title: string; reason: string }[];
+  warnings: string[];
+  archivo: string;
+  dryRun: boolean;
+}
+
+export interface SummarizeResult {
+  noteId: string;
+  title: string;
+  avisos: string[];
 }
 
 export class ApiError extends Error {
@@ -146,5 +162,16 @@ export const api = {
   localGraph: (id: string, depth: number, query: GraphQuery = {}) =>
     request<Graph>(`/graph/${encodeURIComponent(id)}${qs({ ...query, depth })}`),
 
-  status: () => request<Status>('/status')
+  status: () => request<Status>('/status'),
+
+  /** Sube el zip (o el conversations.json) del export de claude.ai. */
+  importExport: (file: File, options: { dryRun?: boolean; folder?: string } = {}) =>
+    request<ImportReport>(`/import${qs({ dry_run: options.dryRun, folder: options.folder })}`, {
+      method: 'POST',
+      body: file,
+      headers: { 'content-type': 'application/octet-stream' }
+    }),
+
+  summarizeNote: (id: string) =>
+    request<SummarizeResult>(`/notes/${encodeURIComponent(id)}/summarize`, { method: 'POST' })
 };

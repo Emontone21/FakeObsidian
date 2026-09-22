@@ -14,12 +14,17 @@ y forman un grafo.
 |---|---|---|
 | 1 | Esquema, migraciones, servicios, parsers, MCP por stdio con 12 tools, tests | **Lista** |
 | 2 | Interfaz web: listado, nota, pendientes, carpetas/tags, ajustes, grafo | **Lista** |
-| 3 | Streamable HTTP + OAuth 2.1 + Cloudflare Tunnel (conector en claude.ai) | Pendiente |
-| 4 | Importación del export de claude.ai | Pendiente |
+| 3 | Streamable HTTP + OAuth 2.1 + Cloudflare Tunnel (conector en claude.ai) | Salteada a propósito |
+| 4 | Importación del export de claude.ai | **Lista** |
 
-Hoy ya podés conectar Claude Desktop o Claude Code y guardar, buscar, leer, actualizar
-y enlazar notas, y abrir la web en `http://127.0.0.1:8787` para leerlas, editarlas y
-ver el grafo. El acceso desde claude.ai (web y celular) llega en la fase 3.
+Todo corre en `127.0.0.1`. Claude Desktop y Claude Code se conectan por MCP stdio, que
+es un proceso local sin red de por medio, y la web se abre en `http://127.0.0.1:8787`.
+
+**La fase 3 quedó salteada a propósito.** Solo hace falta para usar el vault desde
+claude.ai en el navegador o el celular: ahí Claude corre en los servidores de Anthropic
+y no puede alcanzar tu `127.0.0.1`, así que haría falta un túnel, un dominio https y
+OAuth 2.1. Para trabajar desde Desktop o Code no aporta nada. Si algún día querés
+guardar notas desde el celular, se hace en su momento sin tocar nada de lo que ya está.
 
 ## Requisitos (Windows)
 
@@ -82,6 +87,7 @@ abierto. Todo lo que no sea el login exige sesión.
 | `/grafo` | Grafo global: física de fuerzas, zoom, arrastre, resaltado de vecinos al pasar el mouse, buscador que resalta, tags como nodos, enlaces sin resolver, aristas por tag compartido, filtros y sliders de repulsión, distancia y fuerza central |
 | `/pendientes` | Todos los pendientes, agrupables por responsable, nota o fecha; el checkbox reescribe la línea en la nota |
 | `/carpetas` y `/tags` | Renombrar, fusionar y borrar; renombrar una carpeta mueve sus notas y fusionar tags no duplica notas |
+| `/importar` | Subir el export de claude.ai, previsualizar qué se va a crear e importar sin duplicar |
 | `/ajustes` | Exportar el vault como zip, bajar el backup de la base, cambiar contraseña, tema claro/oscuro y estado del vault |
 
 Tema oscuro por defecto, claro opcional desde la barra lateral o Ajustes.
@@ -123,9 +129,10 @@ pm2 save
 npm test
 ```
 
-143 tests: parsers de wikilinks, secciones y pendientes, render de la plantilla,
-servicios, hash de contraseña y freno de fuerza bruta, la API REST completa, y los
-tools MCP a través de un cliente MCP real.
+216 tests: parsers de wikilinks, secciones y pendientes, render de la plantilla,
+servicios, hash de contraseña y freno de fuerza bruta, el parser del export de claude.ai
+con sus variantes de formato, la API REST completa, y los tools MCP a través de un
+cliente MCP real.
 
 ### Con MCP Inspector
 
@@ -202,6 +209,39 @@ directamente el prompt `guardar-conversacion` que ya expone el conector: trae la
 mismas instrucciones.
 
 Después alcanza con decir *"guardá esto en Bitácora"*.
+
+## Importar tus conversaciones viejas
+
+En claude.ai: **Configuración → Privacidad → Exportar datos**. Te llega un mail con un
+zip. Subilo en `/importar` tal cual, sin descomprimir.
+
+Cada conversación se convierte en una nota en la carpeta `Importado`, con el título de
+la conversación, su fecha original, los tags `import` y `sin-resumir`, y la
+transcripción completa dentro de un bloque plegable en «Notas adicionales».
+
+Antes de escribir nada te muestra qué va a hacer: cuántas conversaciones encontró,
+cuántas va a crear y cuántas ya estaban. **Reimportar el mismo archivo no duplica nada**:
+cada nota queda atada al id de su conversación.
+
+El parser es tolerante a propósito, porque el formato del export cambió entre versiones:
+acepta la lista suelta o envuelta en un objeto, `chat_messages` o `messages`, `sender` o
+`role`, texto plano o bloques de contenido, y fechas ISO o epoch. Lo que no entiende lo
+saltea y te lo informa, en vez de fallar entero.
+
+### Generar el resumen con Claude (opcional)
+
+Las notas importadas traen la transcripción cruda, no la plantilla. Si ponés
+`ANTHROPIC_API_KEY` en el `.env`, aparece un botón **Generar resumen** —en la pantalla de
+importación para hacerlo en lote, y en cada nota para hacerlo de a una— que produce
+contexto, decisiones, pendientes y referencias desde la transcripción, sugiere carpeta y
+tags, pasa la nota a `archivado` y le saca el tag `sin-resumir`. La transcripción queda
+intacta.
+
+Tiene tres frenos puestos a propósito: no mueve la nota a una carpeta que no exista, no
+guarda fechas que no parseen, y si la llamada falla la nota queda como estaba.
+
+Sin la clave, la importación funciona igual: las notas quedan con el tag `sin-resumir` y
+las resumís a mano cuando quieras.
 
 ## Comandos
 
@@ -329,6 +369,7 @@ bitacora/
 │  ├─ services/           La única lógica de la app (la comparten MCP y la web)
 │  ├─ mcp/                Servidor MCP: tools, esquemas, entrypoint stdio
 │  ├─ http/               API REST, sesión y servido del frontend compilado
+│  └─ services/import.ts  Importación del export, y summarize.ts el resumen con Claude
 │  ├─ seed.ts             14 notas de ejemplo
 │  └─ export-cli.ts       Exportación a .md
 ├─ web/src/
@@ -374,10 +415,21 @@ Cosas que conviene saber si vas a tocar el código:
 - **La sesión web es una cookie httpOnly** contra una tabla `sessions`, así sobrevive a
   reiniciar el servidor. La contraseña se guarda con scrypt y sal por contraseña, y
   cambiarla corta todas las sesiones abiertas.
+- **La transcripción importada baja de nivel los encabezados**: un `## Algo` escrito por
+  Claude dentro de una conversación se guardaría como una sección nueva de la nota y
+  rompería `update_note` y `append_to_note`. Pasa a negrita; lo que está dentro de un
+  bloque de código no se toca.
+- **El HTML del cuerpo se renderiza sanitizado.** El bloque plegable de la transcripción
+  es `<details>`, así que la web interpreta HTML crudo — y ese contenido sale de
+  conversaciones, no es confiable. Va por `rehype-raw` + `rehype-sanitize`, con el
+  esquema extendido solo para las clases que usa el render propio.
+- **`get_note` devuelve los pendientes en el orden del cuerpo**, no en el del tablero: la
+  vista de nota mapea el N-ésimo checkbox del markdown con el N-ésimo pendiente.
 
-## Lo que viene
+## Lo que quedó afuera
 
-- **Fase 3** — Streamable HTTP en `/mcp` con OAuth 2.1 (PKCE, registro dinámico de
-  clientes, rotación de refresh tokens) y Cloudflare Tunnel, para usarlo como conector
-  personalizado desde claude.ai en web y celular.
-- **Fase 4** — Importar el `conversations.json` del export de claude.ai.
+**Fase 3: acceso desde claude.ai.** Streamable HTTP en `/mcp` con OAuth 2.1 (PKCE,
+registro dinámico de clientes, rotación de refresh tokens) publicado con Cloudflare
+Tunnel. Se saltea porque solo sirve para usar el vault desde el navegador o el celular,
+y para eso hace falta un dominio https propio. Nada de lo que ya está cambia si algún
+día se agrega: el transporte HTTP usaría la misma capa de servicios que el stdio.

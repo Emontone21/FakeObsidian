@@ -148,8 +148,9 @@ export function createNote(ctx: Ctx, input: SaveNoteInput): SaveNoteResult {
       title,
       key,
       input.folder.trim(),
-      now.date,
-      now.time,
+      // Importar y sembrar traen la fecha original; lo normal es la de hoy.
+      input.date ?? now.date,
+      input.time ?? now.time,
       source,
       input.sourceConversationId ?? null,
       input.sourceUrl ?? null,

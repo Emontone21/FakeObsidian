@@ -303,12 +303,7 @@ function main(): void {
       skipped += 1;
       continue;
     }
-    const { date, time, ...input } = seed;
-    const result = app.services.saveNote(input);
-    // El servidor sella la fecha de hoy; para el ejemplo interesa que esten repartidas.
-    app.db
-      .prepare('UPDATE notes SET date = ?, time = ?, created_at = ?, updated_at = ? WHERE id = ?')
-      .run(date, time, `${date}T${time}:00-03:00`, `${date}T${time}:00-03:00`, result.note.id);
+    app.services.saveNote(seed);
     created += 1;
   }
 

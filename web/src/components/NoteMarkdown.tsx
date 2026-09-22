@@ -1,12 +1,47 @@
 import type { OutLink } from '@bitacora/shared';
 import { useMemo, type ComponentProps } from 'react';
 import Markdown from 'react-markdown';
+import rehypeRaw from 'rehype-raw';
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import { Link } from 'react-router-dom';
 import remarkGfm from 'remark-gfm';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 const WIKILINK = /(!?)\[\[([^[\]|]+)(?:\|([^[\]]*))?\]\]/g;
+
+/** Prefijo de la clase que lleva el indice del pendiente dentro del body. */
+const TASK_CLASS = 'bitacora-task-';
+
+/**
+ * El cuerpo de una nota puede traer HTML crudo: la transcripcion importada usa
+ * <details> para el bloque plegable. rehype-raw lo interpreta y rehype-sanitize
+ * lo limpia, porque ese contenido sale de conversaciones y no es confiable.
+ * Se extiende el esquema por defecto solo con lo que necesita el render propio.
+ */
+/**
+ * Habilita propiedades reemplazando la entrada previa.
+ * El esquema por defecto restringe `className` con tuplas del tipo
+ * ["className", "valor-permitido"], asi que agregar el nombre al lado no
+ * alcanza: hay que sacar la tupla o el valor propio queda filtrado.
+ */
+function allow(entries: unknown[] | undefined, ...names: string[]): unknown[] {
+  const kept = (entries ?? []).filter((entry) => {
+    const property = Array.isArray(entry) ? entry[0] : entry;
+    return !names.includes(property as string);
+  });
+  return [...kept, ...names];
+}
+
+const SANITIZE_SCHEMA = {
+  ...defaultSchema,
+  attributes: {
+    ...defaultSchema.attributes,
+    a: allow(defaultSchema.attributes?.a as unknown[], 'className', 'title'),
+    li: allow(defaultSchema.attributes?.li as unknown[], 'className'),
+    span: allow(defaultSchema.attributes?.span as unknown[], 'className')
+  }
+};
 
 function titleKey(value: string): string {
   return value
@@ -31,8 +66,13 @@ function remarkBitacora({ resolveTo }: { resolveTo: Map<string, string> }) {
 
     const walk = (node: any) => {
       if (node.type === 'listItem' && typeof node.checked === 'boolean') {
+        // El indice viaja en className y no en un data-*: rehype-raw reserializa
+        // el arbol y los data-* propios no sobreviven ese ida y vuelta.
         node.data = node.data ?? {};
-        node.data.hProperties = { ...node.data.hProperties, 'data-task': String(taskIndex++) };
+        node.data.hProperties = {
+          ...node.data.hProperties,
+          className: ['task-list-item', `${TASK_CLASS}${taskIndex++}`]
+        };
       }
       if (!Array.isArray(node.children)) return;
 
@@ -91,12 +131,15 @@ export function NoteMarkdown({ body, outlinks, onToggleTask }: NoteMarkdownProps
     return map;
   }, [outlinks]);
 
-  const plugins = useMemo(() => [remarkGfm, [remarkBitacora, { resolveTo }] as const], [resolveTo]);
+  const remarkPlugins = useMemo(() => [remarkGfm, [remarkBitacora, { resolveTo }] as const], [resolveTo]);
+  // El orden importa: primero se parsea el HTML crudo, despues se sanitiza.
+  const rehypePlugins = useMemo(() => [rehypeRaw, [rehypeSanitize, SANITIZE_SCHEMA] as const], []);
 
   return (
     <div className="markdown">
       <Markdown
-        remarkPlugins={plugins as never}
+        remarkPlugins={remarkPlugins as never}
+        rehypePlugins={rehypePlugins as never}
         components={{
           a({ href, className, children, ...rest }: ComponentProps<'a'>) {
             if (className?.includes('unresolved')) {
@@ -120,17 +163,18 @@ export function NoteMarkdown({ body, outlinks, onToggleTask }: NoteMarkdownProps
             );
           },
           li(props: any) {
-            const task = props['data-task'];
-            if (task === undefined || !onToggleTask) {
+            const classes = typeof props.className === 'string' ? props.className.split(/\s+/) : [];
+            const marker = classes.find((c: string) => c.startsWith(TASK_CLASS));
+            if (marker === undefined || !onToggleTask) {
               const { node: _node, ...rest } = props;
               return <li {...rest} />;
             }
-            const index = Number(task);
+            const index = Number(marker.slice(TASK_CLASS.length));
             // remark-gfm mete su propio <input disabled>; lo reemplazamos por uno vivo.
             const children = Array.isArray(props.children) ? props.children : [props.children];
             const checked = findCheckedState(children);
             return (
-              <li className="task">
+              <li className="task-list-item">
                 <input
                   type="checkbox"
                   checked={checked}

@@ -127,14 +127,22 @@ export function SettingsPage({ onLoggedOut }: { onLoggedOut: () => void }) {
       </div>
 
       <div className="panel">
-        <h2>Conector remoto</h2>
-        <p style={{ color: 'var(--text-muted)', marginTop: 0 }}>
-          {status.data?.conectorRemoto.estado ?? 'Cargando…'}
-        </p>
+        <h2>Resumen automático</h2>
+        <p style={{ color: 'var(--text-muted)', marginTop: 0 }}>{status.data?.resumidor.estado ?? 'Cargando…'}</p>
         <p className="hint">
-          En la fase 3 este servidor va a exponer <code>/mcp</code> por Streamable HTTP con OAuth 2.1, para publicarlo
-          con Cloudflare Tunnel y agregarlo en claude.ai como conector personalizado. Hoy el acceso desde Claude
-          Desktop y Claude Code va por stdio, que no necesita nada de esto.
+          Con <code>ANTHROPIC_API_KEY</code> en el <code>.env</code>, las notas importadas muestran un botón para
+          generar la plantilla estructurada con Claude a partir de la transcripción.
+        </p>
+      </div>
+
+      <div className="panel">
+        <h2>Acceso desde claude.ai</h2>
+        <p style={{ color: 'var(--text-muted)', marginTop: 0 }}>{status.data?.conectorRemoto.estado ?? 'Cargando…'}</p>
+        <p className="hint">
+          Claude Desktop y Claude Code hablan con Bitácora por stdio, que es un proceso local y no necesita nada de
+          esto. Usar el vault desde claude.ai en el navegador o el celular sí lo necesitaría: los servidores de
+          Anthropic no pueden alcanzar tu <code>127.0.0.1</code>, así que haría falta exponer <code>/mcp</code> por
+          Streamable HTTP con OAuth 2.1 detrás de un Cloudflare Tunnel y un dominio propio.
         </p>
       </div>
     </Page>

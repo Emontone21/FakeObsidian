@@ -8,6 +8,7 @@ import {
   type PendingItem,
   type PendingItemWithNote,
   type SaveNoteInput,
+  type ParseResult,
   type SearchHit,
   type TagCount,
   type UpdateNoteInput,
@@ -18,6 +19,12 @@ import type { Db } from '../db/index.js';
 import { deleteFolder, ensureFolder, listFolders, renameFolder } from './folders.js';
 import { exportNote, exportVault, type ExportedNote } from './export.js';
 import { getFullGraph, getNeighborhood, type GraphOptions } from './graph.js';
+import {
+  findNoteByConversationId,
+  importConversations,
+  type ImportOptions,
+  type ImportReport
+} from './import.js';
 import { backLinks, outLinks } from './links.js';
 import {
   appendToNote,
@@ -38,6 +45,11 @@ import {
 } from './notes.js';
 import { listPending, type PendingFilter } from './pending.js';
 import { countNotes, searchNotes, type SearchFilter, type SearchSort } from './search.js';
+import {
+  isSummarizerEnabled,
+  summarizeNote,
+  type SummarizeResult
+} from './summarize.js';
 import { listTags, renameTag } from './tags.js';
 
 /** Nota completa con todo lo que necesita get_note y la vista /nota/:id. */
@@ -87,6 +99,13 @@ export interface Services {
 
   exportNote(note: Note): ExportedNote;
   exportVault(): ExportedNote[];
+
+  importConversations(parsed: ParseResult, options?: ImportOptions): ImportReport;
+  findNoteByConversationId(conversationId: string): Note | null;
+
+  /** true solo si hay ANTHROPIC_API_KEY: sin eso no se ofrece generar resumen. */
+  summarizerEnabled(): boolean;
+  summarizeNote(idOrTitle: string): Promise<SummarizeResult>;
 }
 
 export function createServices(db: Db, config: Config): Services {
@@ -98,7 +117,9 @@ export function createServices(db: Db, config: Config): Services {
     url: noteUrl(config, note.id),
     outlinks: outLinks(db, note.id),
     backlinks: backLinks(db, note.id),
-    pending: listPending(db, { noteId: note.id, includeDone: true })
+    // En el orden del cuerpo, no en el del tablero: la vista de nota mapea el
+    // N-esimo checkbox del markdown con el N-esimo pendiente de esta lista.
+    pending: listPending(db, { noteId: note.id, includeDone: true }).sort((a, b) => a.position - b.position)
   });
 
   return {
@@ -135,9 +156,26 @@ export function createServices(db: Db, config: Config): Services {
     getFullGraph: (options) => getFullGraph(db, options),
 
     exportNote,
-    exportVault: () => exportVault(db)
+    exportVault: () => exportVault(db),
+
+    importConversations: (parsed, options) => importConversations(ctx, parsed, options),
+    findNoteByConversationId: (conversationId) => findNoteByConversationId(db, conversationId),
+
+    summarizerEnabled: () => isSummarizerEnabled(),
+    summarizeNote: (idOrTitle) => summarizeNote(ctx, idOrTitle)
   };
 }
 
 export { getNoteById, noteUrl };
-export type { ExportedNote, GraphOptions, LinkNotesResult, PendingFilter, SaveNoteResult, SearchFilter, SearchSort };
+export type {
+  ExportedNote,
+  GraphOptions,
+  ImportOptions,
+  ImportReport,
+  LinkNotesResult,
+  PendingFilter,
+  SaveNoteResult,
+  SearchFilter,
+  SearchSort,
+  SummarizeResult
+};

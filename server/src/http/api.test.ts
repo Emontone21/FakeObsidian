@@ -1,3 +1,4 @@
+import { strToU8, zipSync } from 'fflate';
 import { request as httpRequest, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -13,7 +14,7 @@ let cookie = '';
 /** Cliente minimo que arrastra la cookie de sesion entre llamadas. */
 async function api(path: string, init: RequestInit = {}): Promise<Response> {
   const headers = new Headers(init.headers);
-  headers.set('content-type', 'application/json');
+  if (!headers.has('content-type')) headers.set('content-type', 'application/json');
   if (cookie) headers.set('cookie', cookie);
   const response = await fetch(`${base}${path}`, { ...init, headers, redirect: 'manual' });
   const setCookie = response.headers.getSetCookie?.() ?? [];
@@ -31,6 +32,21 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 const post = (path: string, body: unknown) => api(path, { method: 'POST', body: JSON.stringify(body) });
+
+const EXPORT_CLAUDE = [
+  {
+    uuid: 'conv-1',
+    name: 'Consulta sobre OOS',
+    created_at: '2026-03-04T13:15:00Z',
+    chat_messages: [{ sender: 'human', text: 'Tengo un OOS en el lote AMX-2401.' }]
+  },
+  {
+    uuid: 'conv-2',
+    name: 'Consulta regulatoria',
+    created_at: '2026-04-08T10:00:00Z',
+    chat_messages: [{ sender: 'human', text: '¿Qué pide MSP para la renovación?' }]
+  }
+];
 
 beforeEach(async () => {
   cookie = '';
@@ -255,6 +271,79 @@ describe('API con sesion', () => {
 
     expect(status).toMatchObject({ notas: 1, carpetas: 9, enlacesSinResolver: 1 });
     expect(status.conectorRemoto).toMatchObject({ habilitado: false });
+  });
+
+  it('importa el zip del export de claude.ai', async () => {
+    const zip = zipSync({ 'data/conversations.json': strToU8(JSON.stringify(EXPORT_CLAUDE)) });
+    const response = await api('/api/import', {
+      method: 'POST',
+      body: Buffer.from(zip),
+      headers: { 'content-type': 'application/octet-stream' }
+    });
+
+    expect(response.status).toBe(200);
+    const report = (await response.json()) as { total: number; imported: unknown[]; archivo: string };
+    expect(report).toMatchObject({ total: 2, archivo: 'data/conversations.json' });
+    expect(report.imported).toHaveLength(2);
+
+    const { resultados } = await json<{ resultados: { folder: string }[] }>('/api/notes?folder=Importado');
+    expect(resultados).toHaveLength(2);
+  });
+
+  it('acepta el conversations.json suelto', async () => {
+    const response = await api('/api/import', {
+      method: 'POST',
+      body: Buffer.from(JSON.stringify(EXPORT_CLAUDE)),
+      headers: { 'content-type': 'application/octet-stream' }
+    });
+    expect(response.status).toBe(200);
+    expect((await response.json()).imported).toHaveLength(2);
+  });
+
+  it('dry_run no escribe nada', async () => {
+    const response = await api('/api/import?dry_run=true', {
+      method: 'POST',
+      body: Buffer.from(JSON.stringify(EXPORT_CLAUDE)),
+      headers: { 'content-type': 'application/octet-stream' }
+    });
+
+    expect((await response.json())).toMatchObject({ dryRun: true, total: 2 });
+    expect((await json<{ total: number }>('/api/notes')).total).toBe(0);
+  });
+
+  it('reimportar no duplica', async () => {
+    const body = Buffer.from(JSON.stringify(EXPORT_CLAUDE));
+    const headers = { 'content-type': 'application/octet-stream' };
+    await api('/api/import', { method: 'POST', body, headers });
+    const again = await api('/api/import', { method: 'POST', body, headers });
+
+    expect((await again.json()).skipped).toHaveLength(2);
+    expect((await json<{ total: number }>('/api/notes')).total).toBe(2);
+  });
+
+  it('explica el problema si el archivo no sirve', async () => {
+    const response = await api('/api/import', {
+      method: 'POST',
+      body: Buffer.from('esto no es ni zip ni json'),
+      headers: { 'content-type': 'application/octet-stream' }
+    });
+    expect(response.status).toBe(400);
+    expect((await response.json()).error).toMatch(/no es un zip ni un JSON/);
+  });
+
+  it('rechaza un import vacio', async () => {
+    const response = await api('/api/import', {
+      method: 'POST',
+      body: Buffer.from(''),
+      headers: { 'content-type': 'application/octet-stream' }
+    });
+    expect(response.status).toBe(400);
+  });
+
+  it('avisa que el resumidor esta apagado sin ANTHROPIC_API_KEY', async () => {
+    const status = await json<{ resumidor: { habilitado: boolean; estado: string } }>('/api/status');
+    expect(status.resumidor.habilitado).toBe(false);
+    expect(status.resumidor.estado).toMatch(/sin-resumir/);
   });
 
   it('un id inexistente devuelve 404 con mensaje entendible', async () => {

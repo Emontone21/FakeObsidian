@@ -29,7 +29,15 @@ export function createHttpApp(app: App): Express {
     next();
   });
 
-  server.use(express.json({ limit: '4mb' }));
+  // El import sube un archivo binario; el resto de la API habla JSON.
+  const parseJson = express.json({ limit: '4mb' });
+  server.use((req, res, next) => {
+    if (req.path.startsWith('/api/import')) {
+      next();
+      return;
+    }
+    parseJson(req, res, next);
+  });
   server.use(cookieParser());
 
   // Log minimo: metodo, ruta y estado. Nunca el cuerpo de una nota.

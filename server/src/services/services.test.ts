@@ -258,6 +258,26 @@ describe('pendientes', () => {
     expect(after).toBe(before);
   });
 
+  it('get_note devuelve los pendientes en el orden del cuerpo, no en el del tablero', () => {
+    const { note } = app.services.saveNote({
+      ...BASE_NOTE,
+      title: 'Nota con pendientes ordenados',
+      pendientes: [
+        // El primero ya hecho y con fecha lejana: el tablero lo pondria ultimo.
+        { accion: 'Primero del cuerpo', fecha: '30/12/2026', hecho: true },
+        { accion: 'Segundo del cuerpo', fecha: '01/01/2026' }
+      ]
+    });
+
+    const detail = app.services.requireNoteDetail(note.id);
+    expect(detail.pending.map((p) => p.action)).toEqual(['Primero del cuerpo', 'Segundo del cuerpo']);
+    // El tablero si los ordena por estado y vencimiento.
+    expect(app.services.listPending({ includeDone: true }).map((p) => p.action)).toEqual([
+      'Segundo del cuerpo',
+      'Primero del cuerpo'
+    ]);
+  });
+
   it('filtra por responsable y por fecha limite', () => {
     app.services.saveNote({
       ...BASE_NOTE,
